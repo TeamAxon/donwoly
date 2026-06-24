@@ -1,1 +1,1 @@
-"# first_month_kit" 
+# first_month_kit
