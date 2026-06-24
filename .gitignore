@@ -1,0 +1,65 @@
+# ==============================================================================
+# OS & IDE Templates
+# ==============================================================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# ==============================================================================
+# Docker & Environment Variables (보안 필수!)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+docker-compose.override.yml
+
+# ==============================================================================
+# Frontend (React / Vite / Node)
+# ==============================================================================
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.local
+frontend/*.tsbuildinfo
+
+# npm/yarn/pnpm log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================================================================
+# Backend (Python / FastAPI)
+# ==============================================================================
+# Byte-compiled / optimized / DLL files
+backend/__pycache__/
+backend/*.py[cod]
+backend/*$py.class
+
+# Virtual Environments
+backend/.venv/
+backend/venv/
+backend/env/
+backend/ENV/
+
+# Python Tools & Logs
+backend/.pytest_cache/
+backend/.coverage
+backend/htmlcov/
+backend/.mypy_cache/
+backend/.ruff_cache/
+
+# ==============================================================================
+# Databases & Local Storage (Qdrant 데이터 유출 방지)
+# ==============================================================================
+# 만약 도커 볼륨 대신 로컬 폴더에 qdrant 데이터를 매핑할 경우를 대비
+qdrant_data/
+qdrant_storage/
+*.db
+*.sqlite3
