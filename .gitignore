@@ -43,6 +43,10 @@ backend/*.py[cod]
 backend/*$py.class
 
 # Virtual Environments
+.venv/
+venv/
+env/
+ENV/
 backend/.venv/
 backend/venv/
 backend/env/
