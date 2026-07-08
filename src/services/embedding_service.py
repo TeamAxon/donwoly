@@ -29,8 +29,8 @@ class EmbeddingService:
     def __init__(self, model: str = EMBEDDING_MODEL):
         load_dotenv()
 
-        api_key = os.getenv("OPENAI_API_KEY")
-        if not api_key:
+        api_key = os.getenv("OPENAI_API_KEY", "").strip()
+        if not api_key or api_key.startswith("your_"):
             raise ValueError(
                 "OPENAI_API_KEY is missing. Add it to your .env file before embedding."
             )

@@ -1,36 +1,30 @@
-# 첫달가이드
+# 첫달가이드 DB/RAG 파이프라인
 
-외교부 공공데이터 기반 AI 서비스 **첫달가이드**의 DB/RAG 데이터 파이프라인 작업 공간입니다.
+외교부 공공데이터 기반 AI 서비스 **첫달가이드**의 지식 문서 관리, 임베딩 생성, Qdrant 적재, RAG 답변 테스트용 작업 공간입니다.
 
-이 프로젝트는 어학연수·워킹홀리데이 청년이 해외 첫 달에 필요한 정보를 쉽게 찾도록 돕는 서비스를 목표로 합니다. 현재는 MVP 범위를 **호주 워킹홀리데이**로 좁혀 시작합니다.
+현재 MVP 범위는 **호주 워킹홀리데이**입니다.
 
-## 1. 프로젝트 설명
-
-첫달가이드는 Markdown으로 정리한 지식 문서를 기반으로 RAG 검색을 수행하는 AI 서비스입니다.
-
-데이터 흐름은 다음과 같습니다.
+## 1. 전체 흐름
 
 ```text
 Markdown 지식 문서
 ↓
 YAML Front Matter 파싱
 ↓
-본문 텍스트 추출
+본문 텍스트 chunk 분리
 ↓
 OpenAI text-embedding-3-small 임베딩 생성
 ↓
 Qdrant first_month_guide Collection에 upsert
 ↓
-사용자 질문과 의미가 가까운 문서 검색
+사용자 질문 임베딩
 ↓
-검색 문서를 LLM 답변 근거로 사용
+Qdrant 유사 문서 검색
+↓
+검색된 문서를 근거로 GPT 답변 생성
 ```
 
-이번 단계에서는 실제 OpenAI API나 Qdrant 연결 코드를 작성하지 않고, 지식 문서 구조와 작성 표준만 먼저 정리합니다.
-
-## 2. knowledge 폴더 구조
-
-`knowledge/`는 RAG에 사용할 원본 Markdown 지식 문서를 보관하는 폴더입니다.
+## 2. 폴더 구조
 
 ```text
 knowledge/
@@ -40,34 +34,42 @@ knowledge/
    ├─ labor_law/
    ├─ tax/
    └─ life/
+
+src/
+├─ parsers/
+│  └─ markdown_parser.py
+├─ chunkers/
+│  └─ text_chunker.py
+└─ services/
+   ├─ embedding_service.py
+   ├─ qdrant_service.py
+   └─ rag_service.py
+
+scripts/
+├─ parse_markdown.py
+├─ chunk_markdown.py
+├─ generate_mofa_entry_md.py
+├─ run_mofa_entry_pipeline.py
+├─ embed_one_md.py
+├─ ingest_one_md.py
+├─ ingest_all_md.py
+├─ search_qdrant.py
+└─ ask_rag.py
 ```
 
-국가별로 폴더를 나누고, 그 아래에 카테고리 폴더를 둡니다. 현재는 호주만 만들지만, 나중에는 아래처럼 확장할 수 있습니다.
+## 3. category 값
 
-```text
-knowledge/
-├─ australia/
-├─ canada/
-└─ japan/
-```
+| category | 의미 |
+|---|---|
+| `visa` | 비자 정보 |
+| `departure` | 출국 준비 |
+| `labor_law` | 노동법/근로권 |
+| `tax` | 세금 |
+| `life` | 현지 생활 |
 
-## 3. category 값 설명
+## 4. Markdown 문서 형식
 
-Qdrant payload의 `category` 값은 아래 중 하나를 사용합니다.
-
-| category | 의미 | 예시 |
-|---|---|---|
-| `visa` | 비자 정보 | 417 비자 개요, 신청 자격, 신청 절차 |
-| `departure` | 출국 준비 | 여권, 보험, 항공권, 준비물 |
-| `labor_law` | 노동법/근로권 | 최저임금, 계약, 임금 미지급, 부당 공제 |
-| `tax` | 세금 | TFN, 세금 신고, superannuation |
-| `life` | 현지 생활 | 숙소, 은행, 교통, 통신, 의료 |
-
-카테고리를 통일하는 이유는 Qdrant 검색 시 필터로 사용할 수 있기 때문입니다. 예를 들어 사용자가 비자 질문을 하면 `category: visa` 문서 위주로 검색할 수 있습니다.
-
-## 4. YAML Front Matter란?
-
-Markdown 파일 맨 위에 `---`로 감싼 메타데이터 영역입니다.
+각 지식 문서는 YAML Front Matter와 본문으로 구성합니다.
 
 ```md
 ---
@@ -82,193 +84,282 @@ source: https://...
 language: ko
 last_updated: 2026-07-06
 ---
+
+# 본문 제목
+
+본문 내용...
 ```
 
-이 영역은 임베딩 대상이 아니라, Qdrant payload로 저장할 메타데이터입니다.
+Front Matter는 Qdrant payload가 되고, 본문은 embedding 대상이 됩니다.
 
-## 5. Qdrant payload로 들어가는 정보
+## 5. 환경 준비
 
-Qdrant에는 Markdown 파일 자체가 저장되지 않습니다.
+Python 패키지를 설치합니다.
 
-실제로 저장되는 것은 아래 두 가지입니다.
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+`.env.example`을 복사해서 `.env`를 만듭니다.
+
+```bash
+cp .env.example .env
+```
+
+`.env`에는 아래 값이 필요합니다.
+
+```env
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_CHAT_MODEL=gpt-4o-mini
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=first_month_guide
+```
+
+`.env`는 GitHub에 올리지 않습니다.
+
+## 6. 실행 순서
+
+### 1) Qdrant Docker 실행 확인
+
+Qdrant만 실행합니다.
+
+```bash
+docker compose up -d qdrant
+```
+
+실행 상태 확인:
+
+```bash
+docker compose ps
+curl http://localhost:6333/collections
+```
+
+브라우저에서는 아래 주소로 확인할 수 있습니다.
 
 ```text
-1. 본문 텍스트를 임베딩한 1536차원 벡터
-2. Front Matter에서 추출한 payload
+http://localhost:6333/dashboard
 ```
 
-payload 예시는 다음과 같습니다.
+Docker 권한 오류가 나면 Docker Desktop을 먼저 실행한 뒤 다시 시도합니다.
 
-```json
-{
-  "country": "호주",
-  "country_code": "AU",
-  "target_user": "워킹홀리데이",
-  "category": "visa",
-  "section": "overview",
-  "title": "417 비자 개요",
-  "chunk_id": "visa_417_overview",
-  "source": "https://immi.homeaffairs.gov.au/visas/getting-a-visa/visa-listing/work-holiday-417",
-  "language": "ko",
-  "last_updated": "2026-07-06"
-}
+### 2) .env 설정
+
+```bash
+cp .env.example .env
 ```
 
-payload를 넣는 이유는 출처 표시, 카테고리 필터링, 국가별 확장, 문서 추적을 쉽게 하기 위해서입니다.
+`.env`의 `OPENAI_API_KEY`를 실제 키로 바꿉니다.
 
-## 6. 앞으로 ingest 스크립트가 할 일
+### 3) md 파일 파싱 테스트
 
-향후 `scripts/` 폴더의 스크립트는 아래 순서로 동작하게 됩니다.
+```bash
+python scripts/parse_markdown.py knowledge/australia/visa/417_overview.md
+```
 
-1. `knowledge/` 아래의 `.md` 파일 읽기
-2. YAML Front Matter 파싱
-3. Markdown 본문 추출
-4. OpenAI `text-embedding-3-small`로 임베딩 생성
-5. Qdrant `first_month_guide` Collection에 vector와 payload upsert
+확인할 것:
 
-현재 단계에서는 실제 연결 코드를 작성하지 않고, 각 스크립트 파일에 역할만 정의해둡니다.
+- metadata가 출력되는지
+- content preview가 출력되는지
+- Front Matter 필수값 오류가 없는지
 
-## 7. Markdown Parser
+### 4) chunk 테스트
 
-`src/parsers/markdown_parser.py`는 Markdown 지식 문서를 RAG 파이프라인이 사용할 수 있는 형태로 읽는 파서입니다.
+```bash
+python scripts/chunk_markdown.py knowledge/australia/visa/417_overview.md
+```
 
-파서가 분리하는 값은 세 가지입니다.
+확인할 것:
 
-| 값 | 역할 |
+- chunk 수가 출력되는지
+- `qdrant_point_id`가 생성되는지
+- title, category, text preview가 출력되는지
+
+### 5) embedding 테스트
+
+```bash
+python scripts/embed_one_md.py knowledge/australia/visa/417_overview.md
+```
+
+확인할 것:
+
+- `Vector dimension: 1536`이 출력되는지
+- `OPENAI_API_KEY` 오류가 없는지
+
+### 6) Qdrant 단일 md 적재
+
+```bash
+python scripts/ingest_one_md.py knowledge/australia/visa/417_overview.md
+```
+
+확인할 것:
+
+- `Qdrant collection ready: first_month_guide`
+- `Upserted points: 1`
+
+같은 문서를 다시 적재하면 같은 point id로 덮어씁니다.
+
+### 7) 전체 md 적재
+
+먼저 dry-run으로 문서 파싱과 chunk만 확인합니다.
+
+```bash
+python scripts/ingest_all_md.py --dry-run
+python scripts/ingest_all_md.py knowledge/australia --dry-run
+```
+
+문제가 없으면 실제로 Qdrant에 적재합니다.
+
+```bash
+python scripts/ingest_all_md.py
+python scripts/ingest_all_md.py knowledge/australia
+```
+
+확인할 것:
+
+- 전체 md 파일 수
+- 성공/실패 파일 수
+- 생성된 chunk 수
+- upsert된 point 수
+- 실패 파일과 에러 메시지
+
+### 8) Qdrant 검색 테스트
+
+```bash
+python scripts/search_qdrant.py "417 비자가 뭐야?"
+```
+
+확인할 것:
+
+- score가 출력되는지
+- title, category, text preview가 출력되는지
+- 검색 결과가 417 비자 문서와 관련 있는지
+
+### 9) RAG 답변 테스트
+
+```bash
+python scripts/ask_rag.py "417 비자가 뭐야?"
+```
+
+확인할 것:
+
+- 답변에 검색된 문서 내용이 반영되는지
+- Sources에 title, source, score가 출력되는지
+- 답변이 제공된 context 밖의 내용을 단정하지 않는지
+
+## 7. 스크립트 역할
+
+| 파일 | 역할 |
 |---|---|
-| `metadata` | YAML Front Matter를 dict로 변환한 값입니다. 나중에 Qdrant payload가 됩니다. |
-| `content` | Front Matter를 제외한 Markdown 본문입니다. 나중에 embedding 대상이 됩니다. |
-| `source_path` | 원본 파일 경로입니다. Qdrant 검색 결과가 어떤 md 파일에서 왔는지 추적하고 디버깅할 때 필요합니다. |
+| `scripts/parse_markdown.py` | md 파일의 Front Matter와 본문 분리 테스트 |
+| `scripts/chunk_markdown.py` | 본문을 Qdrant 검색용 chunk로 분리 테스트 |
+| `scripts/generate_mofa_entry_md.py` | 외교부 국가·지역별 입국허가요건 CSV/JSON에서 호주 md 자동 생성 |
+| `scripts/run_mofa_entry_pipeline.py` | 외교부 원본 데이터 탐색, md 생성, 검증, dry-run을 한 번에 실행 |
+| `scripts/embed_one_md.py` | chunk를 OpenAI embedding vector로 변환 테스트 |
+| `scripts/ingest_one_md.py` | md 파일 1개를 Qdrant에 적재 |
+| `scripts/ingest_all_md.py` | knowledge 폴더 전체 md를 Qdrant에 적재 |
+| `scripts/search_qdrant.py` | 사용자 질문으로 Qdrant 검색 테스트 |
+| `scripts/ask_rag.py` | Qdrant 검색 결과를 근거로 GPT 답변 생성 |
 
-필수 메타데이터 검증을 하는 이유는, 나중에 md 파일이 수십~수백 개로 늘어났을 때 잘못 작성된 문서가 Qdrant에 들어가는 것을 막기 위해서입니다.
+## 8. 공공데이터 → Markdown 자동 생성
 
-필수 필드:
-
-```text
-country
-country_code
-target_user
-category
-title
-chunk_id
-source
-language
-last_updated
-```
-
-허용되는 `category` 값:
+외교부 공공데이터 원본 CSV 또는 JSON은 `data/raw/` 폴더에 둡니다.
 
 ```text
-visa
-departure
-labor_law
-tax
-life
+data/
+└─ raw/
+   └─ mofa_entry_requirement.csv
 ```
 
-실행 예시:
-
-```bash
-python3 -m pip install -r requirements.txt
-python3 scripts/parse_markdown.py knowledge/australia/visa/417_overview.md
-```
-
-정상 실행 시 metadata, source_path, content preview가 출력됩니다.
-
-## 8. Text Chunker
-
-`src/chunkers/text_chunker.py`는 긴 Markdown 본문을 Qdrant 검색에 적합한 작은 단위로 나눕니다.
-
-- `Chunk.text`: 나중에 embedding 대상이 되는 텍스트입니다.
-- `Chunk.metadata`: Qdrant payload의 기반이 되는 메타데이터입니다.
-- `source_path`, `chunk_index`, `chunk_count`, `original_chunk_id`, `qdrant_point_id`를 metadata에 추가합니다.
-
-실행 예시:
-
-```bash
-python3 scripts/chunk_markdown.py knowledge/australia/visa/417_overview.md
-```
-
-이번 단계에서는 OpenAI Embedding 생성이나 Qdrant 저장은 하지 않습니다.
-
-## 9. Embedding Service
-
-`src/services/embedding_service.py`는 chunk의 `text`를 OpenAI `text-embedding-3-small` 모델로 임베딩합니다.
-
-- 입력: `Chunk.text`
-- 출력: 1536차원 `list[float]`
-- 보존: `Chunk.metadata`는 나중에 Qdrant payload로 쓰기 위해 그대로 유지합니다.
-
-실행 전 `.env`에 `OPENAI_API_KEY`가 필요합니다.
-
-```bash
-python3 -m pip install -r requirements.txt
-python3 scripts/embed_one_md.py knowledge/australia/visa/417_overview.md
-```
-
-이번 단계에서는 Qdrant 저장은 하지 않고, chunk별 vector dimension이 `1536`인지 확인합니다.
-
-## 10. Qdrant Service
-
-`src/services/qdrant_service.py`는 임베딩된 chunk를 Qdrant에 저장하고 검색하는 서비스입니다.
-
-- Collection: `first_month_guide`
-- Vector size: `1536`
-- Distance: `Cosine`
-- Payload: chunk metadata 전체 + `text`
-
-문서 하나 적재:
-
-```bash
-python3 scripts/ingest_one_md.py knowledge/australia/visa/417_overview.md
-```
-
-검색 테스트:
-
-```bash
-python3 scripts/search_qdrant.py "417 비자가 뭐야?"
-```
-
-이번 단계에서는 검색 결과를 출력하기만 하며, GPT 답변 생성은 하지 않습니다.
-
-여러 Markdown 문서 한 번에 점검:
-
-```bash
-python3 scripts/ingest_all_md.py --dry-run
-python3 scripts/ingest_all_md.py knowledge/australia --dry-run
-```
-
-여러 Markdown 문서 한 번에 Qdrant 적재:
-
-```bash
-python3 scripts/ingest_all_md.py
-python3 scripts/ingest_all_md.py knowledge/australia
-```
-
-`--dry-run`은 OpenAI 임베딩과 Qdrant 저장을 하지 않고, 파일 파싱과 청킹 결과만 확인합니다.
-
-## 11. RAG Service
-
-`src/services/rag_service.py`는 사용자 질문을 임베딩하고, Qdrant에서 관련 chunk를 검색한 뒤, 검색된 context만 근거로 GPT 답변을 생성합니다.
-
-흐름:
+파일명 예시:
 
 ```text
-질문
-↓
-EmbeddingService
-↓
-QdrantService.search
-↓
-검색된 chunk text를 context로 구성
-↓
-GPT 답변 생성
+data/raw/mofa_entry_requirement.csv
+data/raw/mofa_entry_requirement.json
 ```
 
-실행 예시:
+한 번에 실행:
 
 ```bash
-python3 scripts/ask_rag.py "417 비자가 뭐야?"
+python scripts/run_mofa_entry_pipeline.py \
+  --source-url "공식 데이터 URL" \
+  --last-updated 2026-07-07
 ```
 
-답변은 제공된 context 안에서만 생성하도록 제한하며, 비자/법률 최종 판단을 단정하지 않도록 프롬프트에 명시합니다.
+이 명령은 아래 순서만 실행합니다.
+
+```text
+data/raw 원본 탐색
+↓
+Markdown 자동 생성
+↓
+생성 파일 확인
+↓
+validate_generated_md.py 검증
+↓
+ingest_all_md.py --dry-run
+```
+
+실제 Qdrant 적재는 실행하지 않습니다.
+
+호주 입국허가요건 Markdown 자동 생성:
+
+```bash
+python scripts/generate_mofa_entry_md.py data/raw/mofa_entry_requirement.csv \
+  --source-url "공식 데이터 URL" \
+  --last-updated 2026-07-07
+```
+
+입력 파일을 생략하면 `data/raw/` 아래 첫 번째 `.csv` 또는 `.json` 파일을 읽습니다.
+
+```bash
+python scripts/generate_mofa_entry_md.py
+```
+
+생성 파일:
+
+```text
+knowledge/australia/visa/mofa_entry_requirement.md
+```
+
+검증 명령어:
+
+```bash
+python scripts/validate_generated_md.py
+```
+
+dry-run 명령어:
+
+```bash
+python scripts/ingest_all_md.py knowledge/australia --dry-run
+```
+
+## 9. 자주 나는 오류
+
+### `ModuleNotFoundError: No module named 'yaml'`
+
+패키지가 설치되지 않은 Python으로 실행한 경우입니다.
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+### `OPENAI_API_KEY is missing`
+
+`.env`에 실제 OpenAI API Key가 없습니다.
+
+### `Couldn't connect to server` 또는 Qdrant 연결 오류
+
+Qdrant가 실행 중인지 확인합니다.
+
+```bash
+docker compose up -d qdrant
+curl http://localhost:6333/collections
+```
+
+### Docker permission 오류
+
+Docker Desktop을 먼저 실행한 뒤 다시 시도합니다.
