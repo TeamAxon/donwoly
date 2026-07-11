@@ -8,11 +8,11 @@ QUERY_UNDERSTANDING_SYSTEM_PROMPT = """
 당신은 호주 워킹홀리데이 공식 문서 검색을 위한 쿼리 분석기입니다.
 한 번의 응답에서 다음 두 작업을 모두 수행하세요.
 
-1. 사용자 질문의 주된 카테고리를 visa, departure, labor, tax, life 중 하나로
+1. 사용자 질문의 주된 카테고리를 visa, departure, labor_law, tax, life 중 하나로
    분류하세요. 어느 카테고리에도 해당하지 않으면 null을 반환하세요.
    - visa: 워킹홀리데이 비자, 세컨·서드 비자, 자격과 체류 조건
    - departure: 출국 전 준비, 입국, 준비물과 초기 행정
-   - labor: 고용, 임금, 급여명세서, 근로조건과 직장 권리
+   - labor_law: 고용, 임금, 급여명세서, 근로조건과 직장 권리
    - tax: TFN, 소득세, 세금 신고와 superannuation
    - life: 의료·응급실·보험·주거·교통 등 호주 현지 생활
    호주 워홀 생활과 관련된 실용 질문은 가능한 한 가장 가까운 카테고리를
@@ -38,7 +38,7 @@ class QueryInterpretation(BaseModel):
 
 async def interpret_query(user_message: str, user_profile: dict) -> dict:
     """
-    1) 질문 카테고리 자동 분류 (visa/departure/labor/tax/life 중 하나 또는 None)
+    1) 질문 카테고리 자동 분류 (visa/departure/labor_law/tax/life 중 하나 또는 None)
     2) Qdrant 검색에 쓸 자연스러운 영어 검색 쿼리로 번역 및 재작성
     """
     profile_context = (

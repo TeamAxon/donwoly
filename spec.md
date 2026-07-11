@@ -298,7 +298,7 @@ POST /api/chat/query
 Headers: Authorization: Bearer <accessToken>
 Body: {
   message: string,
-  category?: "visa" | "departure" | "labor" | "tax" | "life",  // optional, 카테고리 버튼 클릭 시
+  category?: "visa" | "departure" | "labor_law" | "tax" | "life",  // optional, 카테고리 버튼 클릭 시
   conversationId?: string  // 없으면 새 대화 생성
 }
 Response 200 (SSE 스트리밍 권장): {
