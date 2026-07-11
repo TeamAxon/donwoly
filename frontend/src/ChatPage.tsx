@@ -258,7 +258,10 @@ function ChatPage() {
           </div>
         </header>
 
-        <div className="message-scroll" aria-live="polite">
+        <div
+          className={`message-scroll ${messages.length === 0 ? 'welcome-mode' : ''}`}
+          aria-live="polite"
+        >
           {messages.length === 0 ? (
             <section className="chat-welcome">
               <p className="eyebrow">Australia starts here</p>

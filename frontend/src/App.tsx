@@ -114,7 +114,7 @@ function SignupPage() {
 
   if (isComplete) {
     return (
-      <main className="signup-shell">
+      <main className="signup-shell complete-shell">
         <section className="signup-card complete-card" aria-labelledby="complete-title">
           <div className="complete-icon" aria-hidden="true">✓</div>
           <p className="eyebrow">가입 완료</p>

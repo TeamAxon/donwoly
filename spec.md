@@ -620,6 +620,15 @@ async def build_rag_answer(user_message: str, user_profile: dict, category: str 
   --color-border: #EAEAEA;
   --radius-card: 20px;
   --radius-button: 14px;
+  --radius-pill: 999px;
+  --shadow-card: 0 4px 20px rgba(0, 0, 0, 0.06);
+  --shadow-button: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-button-active: 0 2px 6px rgba(0, 0, 0, 0.05);
+  --space-1: 8px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-6: 48px;
   --font-family: "Pretendard", -apple-system, sans-serif;
 }
 ```
@@ -627,6 +636,9 @@ async def build_rag_answer(user_message: str, user_profile: dict, category: str 
 - 버튼: 풀-바운드(pill) 대신 살짝 둥근 사각형(radius 14~20px) — 토스 느낌
 - 카드: 그림자는 얇고 넓게 (`box-shadow: 0 4px 20px rgba(0,0,0,0.06)`)
 - 인터랙션: 버튼 탭 시 살짝 스케일 다운(0.97) 애니메이션 — 애플/메타 특유의 탄성감
+- 반응형 기준: 모바일 `30rem(480px)` 이하, 태블릿 `48rem(768px)` 이하, 소형 데스크톱 `64rem(1024px)` 이하에서 단계적으로 레이아웃을 전환한다.
+- 모바일 버튼/인풋 등 조작 요소는 최소 `44px × 44px` 터치 영역을 확보하고, 문서 루트에서 의도하지 않은 가로 스크롤이 발생하지 않게 한다.
+- 한글 제목·본문·버튼 라벨은 어절 중간에서 끊기지 않도록 전역에 `word-break: keep-all`과 긴 문자열 안전장치인 `overflow-wrap: break-word`를 적용한다.
 
 프론트 작업 시작 전 `frontend-design` 관련 세부 가이드는 별도로 로드해서 확인할 것 (Codex 환경에 따라 다를 수 있음).
 
