@@ -11,7 +11,7 @@ from chat.openai_client import AIServiceError
 COLLECTION_NAME = "first_month_guide"
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_SIZE = 1536
-VALID_CATEGORIES = {"visa", "departure", "labor_law", "tax", "life"}
+VALID_CATEGORIES = {"visa", "departure", "labor", "tax", "life"}
 
 
 class QdrantSearchError(RuntimeError):

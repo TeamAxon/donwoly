@@ -260,9 +260,9 @@ CREATE TABLE users (
       ↓
 [백엔드: 질문 전처리 + 사용자 프로필 컨텍스트 결합]
       ↓
-[GPT-5: 질문 해석/카테고리 분류 + Qdrant 검색용 쿼리 재작성]  ← 내가 구현
+[GPT-5: 질문 해석/단일 카테고리 분류 + 영어 Qdrant 검색 쿼리 번역·재작성]  ← 내가 구현
       ↓
-[Qdrant 벡터 검색 (qdrant-client 직접 호출, 코사인 유사도)]  ← 내가 구현 (팀원은 임베딩 적재까지만)
+[영어 쿼리를 text-embedding-3-small로 임베딩 → Qdrant 벡터 검색 (코사인 유사도)]  ← 내가 구현 (팀원은 임베딩 적재까지만)
       ↓
 [GPT-5: 검색된 문서 + 사용자 프로필 기반 답변 생성 + 자체 확신도 평가 (구조화 출력)]  ← 내가 구현
       ↓
@@ -376,7 +376,7 @@ data: {}
     "chunk_index": 0,
     "chunk_count": 1,
     "source": "https://...",
-    "language": "ko",
+    "language": "en",
     "last_updated": "2026-07-06",
     "source_path": "knowledge/australia/visa/417_overview.md",
     "original_chunk_id": "visa_417_overview",
@@ -474,8 +474,10 @@ Codex 작업 전 확정/확인 필요:
 # backend/chat/query_understanding.py
 async def interpret_query(user_message: str, user_profile: dict) -> dict:
     """
-    1) 질문 카테고리 자동 분류 (visa/departure/labor/tax/life 중, 애매하면 복수 가능)
-    2) Qdrant 검색에 쓸 쿼리 재작성 (구어체 → 검색 최적화 문장)
+    1) 질문의 주된 카테고리 자동 분류 (visa/departure/labor/tax/life 중 하나 또는 None)
+    2) 한국어 질문을 영어 공식·법률·행정 문서 검색에 적합한 쿼리로 번역 및 재작성
+
+    반환: {"category": str | None, "search_query_en": str}
     """
     ...
 ```
@@ -581,9 +583,12 @@ async def build_rag_answer(user_message: str, user_profile: dict, category: str 
 - OpenAI 호출은 Responses API의 구조화 출력(Pydantic schema)을 사용한다.
 - API 키는 `OPENAI_API_KEY`, 모델명은 `OPENAI_MODEL` 환경변수로 관리하며 기본 모델은 스펙에 지정된 `gpt-5`다.
 - OpenAI 호출 실패 또는 구조화된 출력 부재 시 `502 { "error": "AI_SERVICE_UNAVAILABLE" }`를 반환한다.
-- 질문 해석 결과가 복수 카테고리이면 각 카테고리로 검색한 결과를 합치고 score 내림차순 상위 5개를 답변 생성에 사용한다.
+- 질문 해석 결과의 주된 단일 카테고리로 검색하고 score 내림차순 상위 5개를 답변 생성에 사용한다.
 - 사용자가 카테고리 버튼으로 값을 명시하면 해당 카테고리를 우선 사용한다.
 - 검색 결과가 없거나 `grounded=false` 또는 `confidence=low`이면 섹션 3.6의 fallback 문구와 빈 `sources`를 반환한다.
+- Qdrant의 `payload.text`와 적재 임베딩은 영어 기준이다. 검색 직전 `search_query_en`만 임베딩하며 한국어 원문을 검색 벡터 입력에 다시 혼합하지 않는다.
+- 답변 생성은 영어 참고 문서의 의미와 근거를 판단한 뒤 영어 원문을 그대로 붙여넣지 않고 자연스러운 한국어로 재구성한다.
+- 질문 해석 결과는 주된 단일 카테고리를 사용한다. 사용자가 카테고리 버튼으로 값을 명시하면 그 값을 우선한다.
 
 ---
 
@@ -673,6 +678,7 @@ async def build_rag_answer(user_message: str, user_profile: dict, category: str 
 - [ ] 이메일 인증(가입 시 메일 발송/링크 확인) 진행 여부: X
 - [ ] sparse vector(BM25)용 인덱스가 컬렉션에 있는지 여부 (없으면 dense 검색만으로 1차 구현): X
 - [ ] 배포 시 Qdrant를 어떤 방식으로 접근할지 (로컬 compose와 동일 구조 유지 vs 별도 서버/클라우드): 아직 모름
+- [ ] 로컬 `qdrant_data` 볼륨에 `first_month_guide` 컬렉션을 적재하거나 팀 데이터 볼륨을 연결할지 확인 (2026-07-12 실측: 현재 컬렉션 목록 `[]`)
 - [x] GPT-5 API 키/엔드포인트 관리 방식 → dotenv 환경변수(`OPENAI_API_KEY`, `OPENAI_MODEL`) 사용
 - [x] `backend`에 `depends_on: qdrant` 추가 → `service_started` 조건 적용
 - [x] 1차 카테고리 태그 범위 → 추가 세분화 없이 ["visa", "departure", "labor", "tax", "life"] 5개 고정

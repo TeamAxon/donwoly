@@ -64,7 +64,7 @@ def test_new_query_returns_spec_fields_and_personalized_mock(client):
     response = client.post(
         "/api/chat/query",
         headers=auth_headers(tokens),
-        json={"message": "농장에서 일할 때 최저임금은?", "category": "labor_law"},
+        json={"message": "농장에서 일할 때 최저임금은?", "category": "labor"},
     )
 
     assert response.status_code == 200

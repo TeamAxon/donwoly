@@ -58,15 +58,16 @@ def mock_openai_structured_output(monkeypatch):
         content = "\n".join(message["content"] for message in input_messages)
         if response_model is QueryInterpretation:
             if "TFN" in content or "세금" in content or "신청은 어떻게" in content:
-                categories = ["tax"]
+                category = "tax"
             elif "비자" in content:
-                categories = ["visa"]
+                category = "visa"
             elif "최저임금" in content or "노동" in content:
-                categories = ["labor_law"]
+                category = "labor"
             else:
-                categories = ["life"]
+                category = "life"
             return QueryInterpretation(
-                categories=categories, search_query="테스트용으로 재작성된 검색 쿼리"
+                category=category,
+                search_query_en="English search query for automated tests",
             )
         if response_model is GeneratedAnswer:
             return GeneratedAnswer(
@@ -106,7 +107,7 @@ def mock_embedding_and_qdrant_clients(monkeypatch):
             urls = {
                 "visa": "https://immi.homeaffairs.gov.au/",
                 "departure": "https://www.australia.com/",
-                "labor_law": "https://www.fairwork.gov.au/",
+                "labor": "https://www.fairwork.gov.au/",
                 "tax": "https://www.ato.gov.au/",
                 "life": "https://www.australia.gov.au/",
             }

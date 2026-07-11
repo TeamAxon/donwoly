@@ -14,7 +14,7 @@ import './ChatPage.css'
 const CATEGORY_OPTIONS: { code: ChatCategory; label: string; icon: string }[] = [
   { code: 'visa', label: '비자', icon: '✦' },
   { code: 'departure', label: '출국준비', icon: '✈' },
-  { code: 'labor_law', label: '노동법', icon: '⚒' },
+  { code: 'labor', label: '노동법', icon: '⚒' },
   { code: 'tax', label: '세금', icon: '％' },
   { code: 'life', label: '생활', icon: '⌂' },
 ]

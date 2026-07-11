@@ -58,7 +58,7 @@ export interface ApiErrorBody {
   details?: unknown
 }
 
-export type ChatCategory = 'visa' | 'departure' | 'labor_law' | 'tax' | 'life'
+export type ChatCategory = 'visa' | 'departure' | 'labor' | 'tax' | 'life'
 
 export interface ChatSource {
   title: string
