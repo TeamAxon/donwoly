@@ -35,10 +35,16 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         return JSONResponse(status_code=exc.status_code, content=exc.detail)
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-# React 프론트엔드(5173 포트)에서 백엔드로 요청을 보낼 수 있도록 CORS 허용
+def _allowed_origins() -> list[str]:
+    configured = os.getenv("BACKEND_CORS_ORIGINS", "")
+    origins = [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return origins or ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+
+# React 프론트엔드에서 백엔드로 직접 요청하는 경우를 위한 CORS 허용
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_allowed_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
