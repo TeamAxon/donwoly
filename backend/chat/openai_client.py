@@ -9,7 +9,9 @@ StructuredOutput = TypeVar("StructuredOutput", bound=BaseModel)
 
 
 class AIServiceError(RuntimeError):
-    pass
+    def __init__(self, message: str, reason: str = "ai_service_unavailable") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def get_openai_model() -> str:
@@ -21,7 +23,10 @@ async def parse_structured(
 ) -> StructuredOutput:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise AIServiceError("OPENAI_API_KEY environment variable is required")
+        raise AIServiceError(
+            "OPENAI_API_KEY environment variable is required",
+            reason="openai_api_key_missing",
+        )
 
     try:
         client = AsyncOpenAI(api_key=api_key)
@@ -31,7 +36,12 @@ async def parse_structured(
             text_format=response_model,
         )
     except OpenAIError as exc:
-        raise AIServiceError("OpenAI request failed") from exc
+        reason = "ai_service_unavailable"
+        if getattr(exc, "code", None) == "insufficient_quota" or getattr(
+            exc, "status_code", None
+        ) == 429:
+            reason = "openai_insufficient_quota"
+        raise AIServiceError("OpenAI request failed", reason=reason) from exc
 
     if response.output_parsed is None:
         raise AIServiceError("OpenAI returned no structured output")

@@ -1,92 +1,82 @@
 import uuid
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from threading import RLock
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session, selectinload
+
+from models import ChatMessage, Conversation
 
 
-@dataclass
-class StoredMessage:
-    id: uuid.UUID
-    role: str
-    content: str
-    sources: list[dict]
-    created_at: datetime
+StoredConversation = Conversation
+StoredMessage = ChatMessage
 
 
-@dataclass
-class StoredConversation:
-    id: uuid.UUID
-    user_id: uuid.UUID
-    title: str
-    created_at: datetime
-    updated_at: datetime
-    messages: list[StoredMessage] = field(default_factory=list)
+class ConversationRepository:
+    """Persistent chat history store backed by Postgres."""
 
-
-class InMemoryConversationRepository:
-    """Milestone 5-3 store. TODO: replace with persistent DB storage."""
-
-    def __init__(self) -> None:
-        self._conversations: dict[uuid.UUID, StoredConversation] = {}
-        self._lock = RLock()
-
-    def create(self, user_id: uuid.UUID, first_message: str) -> StoredConversation:
-        now = datetime.now(UTC)
-        conversation = StoredConversation(
-            id=uuid.uuid4(),
-            user_id=user_id,
-            title=first_message[:40],
-            created_at=now,
-            updated_at=now,
-        )
-        with self._lock:
-            self._conversations[conversation.id] = conversation
+    def create(
+        self, db: Session, user_id: uuid.UUID, first_message: str
+    ) -> StoredConversation:
+        title = first_message.strip().replace("\n", " ")[:40] or "새 대화"
+        conversation = Conversation(user_id=user_id, title=title)
+        db.add(conversation)
+        db.commit()
+        db.refresh(conversation)
         return conversation
 
     def get_for_user(
-        self, conversation_id: uuid.UUID, user_id: uuid.UUID
+        self, db: Session, conversation_id: uuid.UUID, user_id: uuid.UUID
     ) -> StoredConversation | None:
-        with self._lock:
-            conversation = self._conversations.get(conversation_id)
-            if conversation is None or conversation.user_id != user_id:
-                return None
-            return conversation
+        statement = (
+            select(Conversation)
+            .options(selectinload(Conversation.messages))
+            .where(Conversation.id == conversation_id, Conversation.user_id == user_id)
+        )
+        return db.scalars(statement).first()
 
-    def list_for_user(self, user_id: uuid.UUID) -> list[StoredConversation]:
-        with self._lock:
-            items = [c for c in self._conversations.values() if c.user_id == user_id]
-            return sorted(items, key=lambda item: item.updated_at, reverse=True)
+    def list_for_user(self, db: Session, user_id: uuid.UUID) -> list[StoredConversation]:
+        statement = (
+            select(Conversation)
+            .where(Conversation.user_id == user_id)
+            .order_by(Conversation.updated_at.desc())
+        )
+        return list(db.scalars(statement).all())
 
     def add_message(
         self,
+        db: Session,
         conversation: StoredConversation,
         role: str,
         content: str,
         sources: list[dict] | None = None,
     ) -> StoredMessage:
-        message = StoredMessage(
-            id=uuid.uuid4(),
+        message = ChatMessage(
+            conversation_id=conversation.id,
             role=role,
             content=content,
             sources=sources or [],
-            created_at=datetime.now(UTC),
         )
-        with self._lock:
-            conversation.messages.append(message)
-            conversation.updated_at = message.created_at
+        conversation.updated_at = datetime.now(UTC)
+        db.add(message)
+        db.add(conversation)
+        db.commit()
+        db.refresh(message)
+        db.refresh(conversation)
         return message
 
-    def delete_for_user(self, conversation_id: uuid.UUID, user_id: uuid.UUID) -> bool:
-        with self._lock:
-            conversation = self._conversations.get(conversation_id)
-            if conversation is None or conversation.user_id != user_id:
-                return False
-            del self._conversations[conversation_id]
-            return True
+    def delete_for_user(
+        self, db: Session, conversation_id: uuid.UUID, user_id: uuid.UUID
+    ) -> bool:
+        conversation = self.get_for_user(db, conversation_id, user_id)
+        if conversation is None:
+            return False
+        db.delete(conversation)
+        db.commit()
+        return True
 
     def clear(self) -> None:
-        with self._lock:
-            self._conversations.clear()
+        # Tests use a fresh DB per case. This method keeps old test hooks harmless.
+        return None
 
 
-conversation_repository = InMemoryConversationRepository()
+conversation_repository = ConversationRepository()

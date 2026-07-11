@@ -7,7 +7,7 @@ from chat.schemas import ChatCategory
 QUERY_UNDERSTANDING_SYSTEM_PROMPT = """
 당신은 호주 워킹홀리데이 상담 검색 쿼리 분석기입니다.
 사용자 질문을 다음 고정 카테고리 중에서만 분류하세요:
-visa, departure, labor, tax, life.
+visa, departure, labor_law, tax, life.
 여러 주제에 걸치면 관련 카테고리를 모두 반환하고, 관련이 없으면 빈 배열을 반환하세요.
 사용자의 나이, 지역, 업종을 반영해 Qdrant 검색에 적합한 한국어 검색 문장으로 재작성하세요.
 질문에 없는 사실을 추가하거나 답변을 생성하지 마세요.
@@ -21,7 +21,7 @@ class QueryInterpretation(BaseModel):
 
 async def interpret_query(user_message: str, user_profile: dict) -> dict:
     """
-    1) 질문 카테고리 자동 분류 (visa/departure/labor/tax/life 중, 애매하면 복수 가능)
+    1) 질문 카테고리 자동 분류 (visa/departure/labor_law/tax/life 중, 애매하면 복수 가능)
     2) Qdrant 검색에 쓸 쿼리 재작성 (구어체 → 검색 최적화 문장)
     """
     profile_context = (

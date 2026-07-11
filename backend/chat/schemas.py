@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class ChatCategory(str, Enum):
     VISA = "visa"
     DEPARTURE = "departure"
-    LABOR = "labor"
+    LABOR_LAW = "labor_law"
     TAX = "tax"
     LIFE = "life"
 
@@ -32,6 +32,8 @@ class ChatQueryRequest(BaseModel):
 class SourceResponse(BaseModel):
     title: str
     url: str | None = None
+    category: ChatCategory | None = None
+    score: float | None = None
 
 
 class ChatQueryResponse(BaseModel):

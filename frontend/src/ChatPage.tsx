@@ -14,7 +14,7 @@ import './ChatPage.css'
 const CATEGORY_OPTIONS: { code: ChatCategory; label: string; icon: string }[] = [
   { code: 'visa', label: '비자', icon: '✦' },
   { code: 'departure', label: '출국준비', icon: '✈' },
-  { code: 'labor', label: '노동법', icon: '⚒' },
+  { code: 'labor_law', label: '노동법', icon: '⚒' },
   { code: 'tax', label: '세금', icon: '％' },
   { code: 'life', label: '생활', icon: '⌂' },
 ]
@@ -295,6 +295,9 @@ function ChatPage() {
                           <a href={source.url} target="_blank" rel="noreferrer" key={`${source.title}-${index}`}>
                             <span>{index + 1}</span>
                             {source.title}
+                            {typeof source.score === 'number' && (
+                              <small>{Math.round(source.score * 100)}%</small>
+                            )}
                             <b aria-hidden="true">↗</b>
                           </a>
                         ))}

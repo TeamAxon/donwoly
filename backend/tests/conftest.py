@@ -62,7 +62,7 @@ def mock_openai_structured_output(monkeypatch):
             elif "비자" in content:
                 categories = ["visa"]
             elif "최저임금" in content or "노동" in content:
-                categories = ["labor"]
+                categories = ["labor_law"]
             else:
                 categories = ["life"]
             return QueryInterpretation(
@@ -106,7 +106,7 @@ def mock_embedding_and_qdrant_clients(monkeypatch):
             urls = {
                 "visa": "https://immi.homeaffairs.gov.au/",
                 "departure": "https://www.australia.com/",
-                "labor": "https://www.fairwork.gov.au/",
+                "labor_law": "https://www.fairwork.gov.au/",
                 "tax": "https://www.ato.gov.au/",
                 "life": "https://www.australia.gov.au/",
             }

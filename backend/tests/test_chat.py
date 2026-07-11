@@ -64,7 +64,7 @@ def test_new_query_returns_spec_fields_and_personalized_mock(client):
     response = client.post(
         "/api/chat/query",
         headers=auth_headers(tokens),
-        json={"message": "농장에서 일할 때 최저임금은?", "category": "labor"},
+        json={"message": "농장에서 일할 때 최저임금은?", "category": "labor_law"},
     )
 
     assert response.status_code == 200
@@ -172,25 +172,34 @@ def test_delete_conversation(client):
     assert missing.status_code == 404
 
 
-def test_openai_failure_returns_service_unavailable(client, monkeypatch):
+def test_openai_failure_streams_and_stores_fallback_message(client, monkeypatch):
     from chat import openai_client
 
     async def fail_parse(input_messages, response_model):
-        raise openai_client.AIServiceError("provider unavailable")
+        raise openai_client.AIServiceError(
+            "provider unavailable", reason="openai_insufficient_quota"
+        )
 
     monkeypatch.setattr(openai_client, "parse_structured", fail_parse)
     tokens = signup_user(client)
+    headers = auth_headers(tokens)
     response = client.post(
         "/api/chat/query",
-        headers=auth_headers(tokens),
+        headers=headers,
         json={"message": "비자 질문"},
     )
 
-    assert response.status_code == 502
-    assert response.json() == {"error": "AI_SERVICE_UNAVAILABLE"}
+    assert response.status_code == 200
+    body = parse_sse(response)
+    assert "OpenAI API 크레딧" in body["answerChunk"]
+    messages = client.get(
+        f"/api/chat/conversations/{body['conversationId']}/messages", headers=headers
+    )
+    assert [item["role"] for item in messages.json()] == ["user", "assistant"]
+    assert "OpenAI API 크레딧" in messages.json()[1]["content"]
 
 
-def test_qdrant_failure_returns_search_service_unavailable(client, monkeypatch):
+def test_qdrant_failure_streams_and_stores_fallback_message(client, monkeypatch):
     from rag import qdrant_search
 
     class BrokenQdrant:
@@ -199,11 +208,18 @@ def test_qdrant_failure_returns_search_service_unavailable(client, monkeypatch):
 
     monkeypatch.setattr(qdrant_search, "_get_qdrant_client", lambda: BrokenQdrant())
     tokens = signup_user(client)
+    headers = auth_headers(tokens)
     response = client.post(
         "/api/chat/query",
-        headers=auth_headers(tokens),
+        headers=headers,
         json={"message": "생활 질문", "category": "life"},
     )
 
-    assert response.status_code == 503
-    assert response.json() == {"error": "SEARCH_SERVICE_UNAVAILABLE"}
+    assert response.status_code == 200
+    body = parse_sse(response)
+    assert "공식 자료 검색 서비스" in body["answerChunk"]
+    messages = client.get(
+        f"/api/chat/conversations/{body['conversationId']}/messages", headers=headers
+    )
+    assert [item["role"] for item in messages.json()] == ["user", "assistant"]
+    assert "공식 자료 검색 서비스" in messages.json()[1]["content"]

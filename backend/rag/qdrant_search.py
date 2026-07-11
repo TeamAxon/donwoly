@@ -11,7 +11,7 @@ from chat.openai_client import AIServiceError
 COLLECTION_NAME = "first_month_guide"
 EMBEDDING_MODEL = "text-embedding-3-small"
 EMBEDDING_SIZE = 1536
-VALID_CATEGORIES = {"visa", "departure", "labor", "tax", "life"}
+VALID_CATEGORIES = {"visa", "departure", "labor_law", "tax", "life"}
 
 
 class QdrantSearchError(RuntimeError):
@@ -43,7 +43,12 @@ def embed_query(text: str) -> list[float]:
             input=text,
         )
     except OpenAIError as exc:
-        raise AIServiceError("OpenAI embedding request failed") from exc
+        reason = "ai_service_unavailable"
+        if getattr(exc, "code", None) == "insufficient_quota" or getattr(
+            exc, "status_code", None
+        ) == 429:
+            reason = "openai_insufficient_quota"
+        raise AIServiceError("OpenAI embedding request failed", reason=reason) from exc
 
     embedding = response.data[0].embedding
     if len(embedding) != EMBEDDING_SIZE:

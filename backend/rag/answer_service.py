@@ -2,6 +2,8 @@ from chat.answer_generation import generate_answer
 from chat.query_understanding import interpret_query
 from rag.qdrant_search import search_chunks
 
+MIN_RELEVANCE_SCORE = 0.25
+
 
 def _merge_chunks(chunk_groups: list[list[dict]], top_k: int = 5) -> list[dict]:
     unique: dict[str, dict] = {}
@@ -33,6 +35,11 @@ async def build_rag_answer(
     else:
         chunk_groups = [search_chunks(search_query, category=None, top_k=5)]
     chunks = _merge_chunks(chunk_groups, top_k=5)
+    chunks = [
+        chunk
+        for chunk in chunks
+        if chunk.get("score") is None or chunk.get("score", 0) >= MIN_RELEVANCE_SCORE
+    ]
 
     resolved_category = category or ",".join(categories) or None
     result = await generate_answer(
@@ -45,6 +52,7 @@ async def build_rag_answer(
         {
             "title": chunk["payload"]["title"],
             "source": chunk["payload"].get("source"),
+            "category": chunk["payload"].get("category"),
             "score": chunk["score"],
         }
         for chunk in chunks

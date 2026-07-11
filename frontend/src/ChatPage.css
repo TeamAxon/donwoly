@@ -378,7 +378,7 @@
 .source-list a {
   padding: 11px 13px;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 8px;
   border: 1px solid var(--color-border);
@@ -402,6 +402,12 @@
 
 .source-list a b {
   color: var(--color-text-secondary);
+}
+
+.source-list a small {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .composer-area {

@@ -17,7 +17,7 @@ async def test_interpret_query_injects_profile_and_returns_structured_dict(monke
         captured["messages"] = input_messages
         assert response_model is QueryInterpretation
         return QueryInterpretation(
-            categories=["labor", "tax"], search_query="NSW hospitality 급여 세금"
+            categories=["labor_law", "tax"], search_query="NSW hospitality 급여 세금"
         )
 
     monkeypatch.setattr(openai_client, "parse_structured", capture)
@@ -28,7 +28,7 @@ async def test_interpret_query_injects_profile_and_returns_structured_dict(monke
     assert "SYDNEY" in prompt
     assert "HOSPITALITY" in prompt
     assert result == {
-        "categories": ["labor", "tax"],
+        "categories": ["labor_law", "tax"],
         "search_query": "NSW hospitality 급여 세금",
     }
 
@@ -68,14 +68,14 @@ async def test_build_rag_answer_searches_multiple_categories_and_maps_sources(mo
     searched_categories = []
 
     async def fake_interpret(user_message, user_profile):
-        return {"categories": ["labor", "tax"], "search_query": "재작성 검색어"}
+        return {"categories": ["labor_law", "tax"], "search_query": "재작성 검색어"}
 
     def fake_search(query, category=None, top_k=5):
         searched_categories.append((query, category, top_k))
         return [
             {
                 "id": category,
-                "score": 0.9 if category == "labor" else 0.8,
+                "score": 0.9 if category == "labor_law" else 0.8,
                 "payload": {
                     "title": f"{category} 문서",
                     "source": f"https://example.com/{category}",
@@ -85,7 +85,7 @@ async def test_build_rag_answer_searches_multiple_categories_and_maps_sources(mo
         ]
 
     async def fake_generate(user_message, chunks, user_profile, category):
-        assert category == "labor,tax"
+        assert category == "labor_law,tax"
         return {"answer": "근거 답변", "grounded": True, "confidence": "high"}
 
     monkeypatch.setattr(answer_service, "interpret_query", fake_interpret)
@@ -94,7 +94,7 @@ async def test_build_rag_answer_searches_multiple_categories_and_maps_sources(mo
     result = await answer_service.build_rag_answer("질문", PROFILE, None)
 
     assert searched_categories == [
-        ("재작성 검색어", "labor", 5),
+        ("재작성 검색어", "labor_law", 5),
         ("재작성 검색어", "tax", 5),
     ]
     assert result["answer"] == "근거 답변"

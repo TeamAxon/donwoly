@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 
 
 COLLECTION_NAME = "first_month_guide"
-EXPECTED_CATEGORIES = {"visa", "departure", "labor", "tax", "life"}
+EXPECTED_CATEGORIES = {"visa", "departure", "labor_law", "tax", "life"}
 EXPECTED_VECTOR_SIZE = 1536
 
 
