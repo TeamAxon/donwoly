@@ -34,6 +34,12 @@ services:
       - ./backend:/app
     env_file:
       - .env
+    environment:
+      # Container-to-container addresses must use Compose service names, not localhost.
+      DATABASE_URL: postgresql+psycopg://donwoly:donwoly@postgres:5432/donwoly
+      QDRANT_URL: http://qdrant:6333
+      # Local development fallback only. Set JWT_SECRET in production.
+      JWT_SECRET: ${JWT_SECRET:-donwoly-local-development-secret-change-in-production}
     depends_on:
       postgres:
         condition: service_healthy

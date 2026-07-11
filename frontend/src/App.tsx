@@ -98,6 +98,7 @@ function SignupPage() {
       localStorage.setItem('refreshToken', result.refreshToken)
       setIsComplete(true)
     } catch (caught) {
+      console.error('[signup] 회원가입 API 요청 실패', caught)
       if (caught instanceof ApiError && caught.code === 'EMAIL_TAKEN') {
         setStep(0)
         setError('이미 사용 중인 이메일이에요.')
