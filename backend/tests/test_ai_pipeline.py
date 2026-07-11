@@ -94,8 +94,17 @@ async def test_build_rag_answer_searches_multiple_categories_and_maps_sources(mo
     result = await answer_service.build_rag_answer("질문", PROFILE, None)
 
     assert searched_categories == [
-        ("재작성 검색어", "labor_law", 5),
-        ("재작성 검색어", "tax", 5),
+        ("재작성 검색어", "labor_law", 10),
+        ("재작성 검색어", "tax", 10),
     ]
     assert result["answer"] == "근거 답변"
     assert [source["score"] for source in result["sources"]] == [0.9, 0.8]
+
+
+def test_expand_search_query_adds_domain_synonyms():
+    expanded = answer_service._expand_search_query(
+        "신원 요건이 뭐야?", "호주 워킹홀리데이 417 비자 신원 요건"
+    )
+
+    assert "character requirement" in expanded
+    assert "police certificate" in expanded
