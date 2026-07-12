@@ -10,6 +10,67 @@ MIN_RELEVANCE_SCORE = 0.18
 SEARCH_TOP_K = 10
 CONTEXT_TOP_K = 5
 
+WAGE_QUERY_KEYWORDS = [
+    "최저시급",
+    "최저 임금",
+    "최저임금",
+    "시급",
+    "임금",
+    "급여",
+    "pay rate",
+    "minimum wage",
+    "wage",
+]
+
+WAGE_PRIORITY_QUERY = (
+    "Fair Work Ombudsman current minimum wage pay rates "
+    "National Minimum Wage casual employee award wage"
+)
+
+
+def _is_wage_query(user_message: str, search_query: str) -> bool:
+    joined = f"{user_message} {search_query}".lower().replace(" ", "")
+    return any(keyword.lower().replace(" ", "") in joined for keyword in WAGE_QUERY_KEYWORDS)
+
+
+def _source_text(payload: dict) -> str:
+    return " ".join(
+        str(payload.get(key, "") or "")
+        for key in ["title", "source", "source_provider", "document_type", "date", "last_updated"]
+    ).lower()
+
+
+def _rerank_for_wage_query(chunks: list[dict]) -> list[dict]:
+    reranked = []
+
+    for chunk in chunks:
+        payload = chunk.get("payload", {})
+        text = _source_text(payload)
+        score = float(chunk.get("score", 0) or 0)
+
+        bonus = 0.0
+
+        # 최신 임금 질문은 Fair Work 공식 안내를 가장 우선한다.
+        if "fair work" in text:
+            bonus += 0.18
+        if "ombudsman" in text:
+            bonus += 0.12
+        if "minimum wage" in text or "pay rates" in text:
+            bonus += 0.14
+        if "current" in text or "2026" in text or "2025" in text:
+            bonus += 0.08
+
+        # 판례/과거 법령은 보조 근거로만 쓰도록 낮춘다.
+        if payload.get("document_type") == "decision" or "decision" in text:
+            bonus -= 0.15
+        if "2021" in text or "2020" in text or "2019" in text:
+            bonus -= 0.08
+
+        chunk = {**chunk, "score": score + bonus}
+        reranked.append(chunk)
+
+    return sorted(reranked, key=lambda item: item.get("score", 0), reverse=True)
+
 
 def _merge_chunks(chunk_groups: list[list[dict]], top_k: int = CONTEXT_TOP_K) -> list[dict]:
     unique: dict[str, dict] = {}
@@ -71,14 +132,46 @@ async def build_rag_answer(
         resolved_category or "all",
     )
 
-    chunk_groups = [
-        search_chunks(
-            search_query_en,
-            category=resolved_category,
-            top_k=SEARCH_TOP_K,
-        )
-    ]
-    raw_chunks = _merge_chunks(chunk_groups, top_k=SEARCH_TOP_K)
+    is_wage_query = _is_wage_query(user_message, search_query_en)
+
+    if is_wage_query:
+        wage_category = "labor_law"
+        chunk_groups = [
+            search_chunks(
+                WAGE_PRIORITY_QUERY,
+                category=wage_category,
+                top_k=30,
+            ),
+            search_chunks(
+                f"{search_query_en} {WAGE_PRIORITY_QUERY}",
+                category=wage_category,
+                top_k=30,
+            ),
+        ]
+
+        # 사용자가 직접 다른 카테고리를 고른 경우도 보조 검색으로 남긴다.
+        if resolved_category and resolved_category != wage_category:
+            chunk_groups.append(
+                search_chunks(
+                    search_query_en,
+                    category=resolved_category,
+                    top_k=SEARCH_TOP_K,
+                )
+            )
+
+        raw_chunks = _rerank_for_wage_query(
+            _merge_chunks(chunk_groups, top_k=30)
+        )[:SEARCH_TOP_K]
+    else:
+        chunk_groups = [
+            search_chunks(
+                search_query_en,
+                category=resolved_category,
+                top_k=SEARCH_TOP_K,
+            )
+        ]
+        raw_chunks = _merge_chunks(chunk_groups, top_k=SEARCH_TOP_K)
+
     chunks = raw_chunks[:CONTEXT_TOP_K]
     chunks = [
         chunk

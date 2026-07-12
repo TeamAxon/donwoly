@@ -68,6 +68,9 @@ def search_chunks(
     """
     if top_k < 1:
         raise ValueError("top_k must be at least 1")
+    if category == "labor":
+        category = "labor_law"
+
     if category is not None and category not in VALID_CATEGORIES:
         raise ValueError(f"unsupported category: {category}")
 
