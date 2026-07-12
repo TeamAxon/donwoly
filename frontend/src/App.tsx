@@ -8,6 +8,7 @@ import ChatPage from './ChatPage'
 import MyPage from './MyPage'
 
 type FormState = Omit<SignupPayload, 'age' | 'region' | 'industry'> & {
+  passwordConfirm: string
   age: string
   region: Region | ''
   industry: Industry | ''
@@ -16,6 +17,7 @@ type FormState = Omit<SignupPayload, 'age' | 'region' | 'industry'> & {
 const INITIAL_FORM: FormState = {
   email: '',
   password: '',
+  passwordConfirm: '',
   name: '',
   age: '',
   region: '',
@@ -33,6 +35,8 @@ function SignupPage() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isComplete, setIsComplete] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showPasswordConfirm, setShowPasswordConfirm] = useState(false)
 
   const progress = useMemo(() => `${((step + 1) / STEP_LABELS.length) * 100}%`, [step])
 
@@ -46,6 +50,9 @@ function SignupPage() {
       if (!EMAIL_PATTERN.test(form.email)) return '올바른 이메일 주소를 입력해주세요.'
       if (!PASSWORD_PATTERN.test(form.password)) {
         return '비밀번호는 8자 이상이며 영문, 숫자, 특수문자를 포함해야 해요.'
+      }
+      if (form.password !== form.passwordConfirm) {
+        return '비밀번호가 서로 일치하지 않아요.'
       }
     }
     if (step === 1) {
@@ -165,15 +172,47 @@ function SignupPage() {
                 autoFocus
               />
               <label className="field-label" htmlFor="password">비밀번호</label>
-              <input
-                id="password"
-                className="text-input"
-                type="password"
-                autoComplete="new-password"
-                placeholder="영문, 숫자, 특수문자 포함 8자 이상"
-                value={form.password}
-                onChange={(event) => updateField('password', event.target.value)}
-              />
+              <div className="password-field">
+                <input
+                  id="password"
+                  className="text-input password-input"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="영문, 숫자, 특수문자 포함 8자 이상"
+                  value={form.password}
+                  onChange={(event) => updateField('password', event.target.value)}
+                />
+                <button
+                  className="password-toggle"
+                  type="button"
+                  aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((current) => !current)}
+                >
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+              <label className="field-label" htmlFor="password-confirm">비밀번호 확인</label>
+              <div className="password-field">
+                <input
+                  id="password-confirm"
+                  className="text-input password-input"
+                  type={showPasswordConfirm ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  placeholder="비밀번호를 한 번 더 입력해주세요"
+                  value={form.passwordConfirm}
+                  onChange={(event) => updateField('passwordConfirm', event.target.value)}
+                />
+                <button
+                  className="password-toggle"
+                  type="button"
+                  aria-label={showPasswordConfirm ? '비밀번호 확인 숨기기' : '비밀번호 확인 보기'}
+                  aria-pressed={showPasswordConfirm}
+                  onClick={() => setShowPasswordConfirm((current) => !current)}
+                >
+                  {showPasswordConfirm ? '🙈' : '👁️'}
+                </button>
+              </div>
             </div>
           )}
 
