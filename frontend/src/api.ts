@@ -182,3 +182,12 @@ export async function updateProfile(
   if (!response.ok) return parseError(response)
   return response.json() as Promise<UserProfile>
 }
+
+export async function deleteAccount(token: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/users/me`, {
+    method: 'DELETE',
+    headers: bearerHeaders(token),
+  })
+  if (!response.ok) return parseError(response)
+}
+

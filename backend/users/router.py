@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from auth.dependencies import get_current_user
@@ -32,3 +32,15 @@ def update_my_profile(
     db.commit()
     db.refresh(user)
     return UserProfile.model_validate(user)
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_account(user: CurrentUser, db: DatabaseSession) -> Response:
+    """
+    현재 로그인한 사용자의 계정을 삭제한다.
+    User 모델의 conversations 관계와 DB FK CASCADE에 의해 대화/메시지도 함께 삭제된다.
+    Qdrant 지식 데이터는 사용자 데이터가 아니므로 삭제하지 않는다.
+    """
+    db.delete(user)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ApiError, getProfile, updateProfile } from './api'
+import { ApiError, deleteAccount, getProfile, updateProfile } from './api'
 import { INDUSTRY_OPTIONS, REGION_OPTIONS } from './constants'
 import type { Industry, Region, UserProfile } from './types'
 import './MyPage.css'
@@ -16,6 +16,7 @@ function MyPage() {
   const [industry, setIndustry] = useState<Industry>()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -82,6 +83,35 @@ function MyPage() {
       }
     } finally {
       setIsSaving(false)
+    }
+  }
+
+
+  const withdrawAccount = async () => {
+    if (!token || isDeleting) return
+    const confirmed = window.confirm(
+      '정말 회원탈퇴를 진행할까요? 계정 정보와 최근 대화가 모두 삭제됩니다.',
+    )
+    if (!confirmed) return
+
+    setIsDeleting(true)
+    setError('')
+    setSuccess('')
+    try {
+      await deleteAccount(token)
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      navigate('/signup', { replace: true })
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 401) {
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        navigate('/login', { replace: true })
+      } else {
+        setError('회원탈퇴를 처리하지 못했어요. 잠시 후 다시 시도해주세요.')
+      }
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -153,9 +183,24 @@ function MyPage() {
               {error && <p className="profile-error" role="alert">{error}</p>}
               {success && <p className="profile-success">{success}</p>}
             </div>
-            <button className="primary-button save-profile" type="submit" disabled={isSaving}>
+            <button className="primary-button save-profile" type="submit" disabled={isSaving || isDeleting}>
               {isSaving ? '저장 중...' : '변경사항 저장'}
             </button>
+
+            <div className="danger-zone">
+              <div>
+                <strong>회원탈퇴</strong>
+                <p>계정 정보와 최근 대화가 삭제됩니다. RAG 지식 데이터는 유지됩니다.</p>
+              </div>
+              <button
+                className="danger-button"
+                type="button"
+                disabled={isDeleting}
+                onClick={() => void withdrawAccount()}
+              >
+                {isDeleting ? '탈퇴 처리 중...' : '회원탈퇴'}
+              </button>
+            </div>
           </form>
         ) : (
           <div className="profile-card profile-loading">
