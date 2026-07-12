@@ -14,9 +14,14 @@ VERIFICATION_SYSTEM_PROMPT = """
 참고 문서:
 {retrieved_chunks}
 
+이전 대화 맥락:
+{conversation_history}
+
 사용자 질문: {user_query}
 
 주의:
+- 이전 대화는 현재 질문의 생략된 주어, 대상, 맥락을 이해하는 데만 사용하세요.
+- 사실 판단과 구체적인 안내는 반드시 참고 문서 근거 안에서만 답변하세요.
 - 참고 문서는 영어로 되어 있을 수 있습니다. 문서 내용을 이해한 뒤 반드시 한국어로 답변하세요.
 - 참고 문서의 영어 원문을 그대로 번역해서 붙여넣지 말고, 자연스러운 한국어 설명으로 재구성하세요.
 - 참고 문서에 명확한 근거가 없으면 grounded=false, confidence=low로 판단하세요.
@@ -39,11 +44,33 @@ class GeneratedAnswer(BaseModel):
     confidence: Literal["high", "medium", "low"]
 
 
+def _format_conversation_history(
+    conversation_history: list[dict[str, str]] | None,
+    *,
+    limit: int = 8,
+    max_chars_per_message: int = 700,
+) -> str:
+    if not conversation_history:
+        return "이전 대화 없음"
+
+    lines: list[str] = []
+    for message in conversation_history[-limit:]:
+        role = "사용자" if message.get("role") == "user" else "Donwoly"
+        content = (message.get("content") or "").strip()
+        if not content:
+            continue
+        if len(content) > max_chars_per_message:
+            content = f"{content[:max_chars_per_message]}..."
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines) or "이전 대화 없음"
+
+
 async def generate_answer(
     user_message: str,
     retrieved_chunks: list[dict],
     user_profile: dict,
     category: str | None,
+    conversation_history: list[dict[str, str]] | None = None,
 ) -> dict:
     """
     GPT-5 한 번 호출로 답변 + 자체 확신도(grounded/confidence)를 구조화된 JSON으로 받음.
@@ -63,6 +90,7 @@ async def generate_answer(
         industry=user_profile["industry"],
         category=category or "미분류",
         retrieved_chunks=retrieved_text,
+        conversation_history=_format_conversation_history(conversation_history),
         user_query=user_message,
     )
     result = await openai_client.parse_structured(

@@ -74,6 +74,26 @@ def _get_conversation(
     return conversation
 
 
+def _recent_conversation_history(
+    conversation: StoredConversation,
+    *,
+    exclude_message_id: uuid.UUID | None = None,
+    limit: int = 8,
+) -> list[dict[str, str]]:
+    """최근 대화를 RAG가 참고할 수 있는 가벼운 형태로 변환한다."""
+    messages = [
+        message
+        for message in conversation.messages
+        if exclude_message_id is None or message.id != exclude_message_id
+    ]
+    recent_messages = messages[-limit:]
+    return [
+        {"role": message.role, "content": message.content}
+        for message in recent_messages
+        if message.content.strip()
+    ]
+
+
 @router.post("/query")
 async def query_chat(
     payload: ChatQueryRequest, user: CurrentUser, db: DbSession
@@ -83,13 +103,20 @@ async def query_chat(
     else:
         conversation = _get_conversation(db, payload.conversation_id, user)
 
-    conversation_repository.add_message(db, conversation, "user", payload.message)
+    user_message = conversation_repository.add_message(
+        db, conversation, "user", payload.message
+    )
+    conversation = _get_conversation(db, conversation.id, user)
+    conversation_history = _recent_conversation_history(
+        conversation, exclude_message_id=user_message.id
+    )
     user_profile = {"age": user.age, "region": user.region, "industry": user.industry}
     try:
         result = await build_rag_answer(
             payload.message,
             user_profile,
             payload.category.value if payload.category is not None else None,
+            conversation_history=conversation_history,
         )
     except AIServiceError as exc:
         result = {

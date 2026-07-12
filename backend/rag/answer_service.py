@@ -3,6 +3,7 @@ import logging
 from chat.answer_generation import generate_answer
 from chat.query_understanding import interpret_query
 from rag.qdrant_search import search_chunks
+from rag.search_strategies import rerank_chunks_for_strategy, select_search_strategy
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -10,66 +11,39 @@ MIN_RELEVANCE_SCORE = 0.18
 SEARCH_TOP_K = 10
 CONTEXT_TOP_K = 5
 
-WAGE_QUERY_KEYWORDS = [
-    "최저시급",
-    "최저 임금",
-    "최저임금",
-    "시급",
-    "임금",
-    "급여",
-    "pay rate",
-    "minimum wage",
-    "wage",
-]
+def _format_conversation_history(
+    conversation_history: list[dict[str, str]] | None,
+    *,
+    limit: int = 8,
+    max_chars_per_message: int = 500,
+) -> str:
+    if not conversation_history:
+        return ""
 
-WAGE_PRIORITY_QUERY = (
-    "Fair Work Ombudsman current minimum wage pay rates "
-    "National Minimum Wage casual employee award wage"
-)
-
-
-def _is_wage_query(user_message: str, search_query: str) -> bool:
-    joined = f"{user_message} {search_query}".lower().replace(" ", "")
-    return any(keyword.lower().replace(" ", "") in joined for keyword in WAGE_QUERY_KEYWORDS)
+    lines: list[str] = []
+    for message in conversation_history[-limit:]:
+        role = "사용자" if message.get("role") == "user" else "Donwoly"
+        content = (message.get("content") or "").strip()
+        if not content:
+            continue
+        if len(content) > max_chars_per_message:
+            content = f"{content[:max_chars_per_message]}..."
+        lines.append(f"{role}: {content}")
+    return "\n".join(lines)
 
 
-def _source_text(payload: dict) -> str:
-    return " ".join(
-        str(payload.get(key, "") or "")
-        for key in ["title", "source", "source_provider", "document_type", "date", "last_updated"]
-    ).lower()
-
-
-def _rerank_for_wage_query(chunks: list[dict]) -> list[dict]:
-    reranked = []
-
-    for chunk in chunks:
-        payload = chunk.get("payload", {})
-        text = _source_text(payload)
-        score = float(chunk.get("score", 0) or 0)
-
-        bonus = 0.0
-
-        # 최신 임금 질문은 Fair Work 공식 안내를 가장 우선한다.
-        if "fair work" in text:
-            bonus += 0.18
-        if "ombudsman" in text:
-            bonus += 0.12
-        if "minimum wage" in text or "pay rates" in text:
-            bonus += 0.14
-        if "current" in text or "2026" in text or "2025" in text:
-            bonus += 0.08
-
-        # 판례/과거 법령은 보조 근거로만 쓰도록 낮춘다.
-        if payload.get("document_type") == "decision" or "decision" in text:
-            bonus -= 0.15
-        if "2021" in text or "2020" in text or "2019" in text:
-            bonus -= 0.08
-
-        chunk = {**chunk, "score": score + bonus}
-        reranked.append(chunk)
-
-    return sorted(reranked, key=lambda item: item.get("score", 0), reverse=True)
+def _build_contextual_query(
+    user_message: str, conversation_history: list[dict[str, str]] | None
+) -> str:
+    formatted_history = _format_conversation_history(conversation_history)
+    if not formatted_history:
+        return user_message
+    return (
+        "아래는 같은 대화방에서 이어진 이전 대화입니다. "
+        "현재 질문의 생략된 대상이나 '그거', '그럼' 같은 표현을 이해하는 데만 참고하세요.\n\n"
+        f"[이전 대화]\n{formatted_history}\n\n"
+        f"[현재 질문]\n{user_message}"
+    )
 
 
 def _merge_chunks(chunk_groups: list[list[dict]], top_k: int = CONTEXT_TOP_K) -> list[dict]:
@@ -115,42 +89,65 @@ def _log_search_debug(
 
 
 async def build_rag_answer(
-    user_message: str, user_profile: dict, category: str | None
+    user_message: str,
+    user_profile: dict,
+    category: str | None,
+    conversation_history: list[dict[str, str]] | None = None,
 ) -> dict:
     """
     1) 질문 해석 후 search_chunks()로 검색
     2) generate_answer()로 답변 생성 + 자체 검증
     3) {"answer": str, "sources": [...]} 형태로 리턴
     """
-    interpretation = await interpret_query(user_message, user_profile)
+    contextual_query = _build_contextual_query(user_message, conversation_history)
+    interpretation = await interpret_query(contextual_query, user_profile)
     search_query_en = interpretation["search_query_en"]
     resolved_category = category or interpretation["category"]
+    intent = interpretation.get("intent")
+    strategy = select_search_strategy(
+        intent=intent,
+        user_message=contextual_query,
+        search_query=search_query_en,
+    )
     logger.info(
-        "RAG translated query | question_ko=%r | search_query_en=%r | category=%s",
+        "RAG translated query | question_ko=%r | search_query_en=%r | category=%s | intent=%s | strategy=%s",
         user_message,
         search_query_en,
         resolved_category or "all",
+        intent or "none",
+        strategy.intent if strategy else "default",
     )
 
-    is_wage_query = _is_wage_query(user_message, search_query_en)
+    if strategy:
+        strategy_category = strategy.category
+        chunk_groups = []
 
-    if is_wage_query:
-        wage_category = "labor_law"
-        chunk_groups = [
-            search_chunks(
-                WAGE_PRIORITY_QUERY,
-                category=wage_category,
-                top_k=30,
-            ),
-            search_chunks(
-                f"{search_query_en} {WAGE_PRIORITY_QUERY}",
-                category=wage_category,
-                top_k=30,
-            ),
-        ]
+        for priority_query in strategy.priority_queries:
+            chunk_groups.append(
+                search_chunks(
+                    priority_query,
+                    category=strategy_category,
+                    top_k=strategy.priority_top_k,
+                )
+            )
+            chunk_groups.append(
+                search_chunks(
+                    f"{search_query_en} {priority_query}",
+                    category=strategy_category,
+                    top_k=strategy.priority_top_k,
+                )
+            )
 
-        # 사용자가 직접 다른 카테고리를 고른 경우도 보조 검색으로 남긴다.
-        if resolved_category and resolved_category != wage_category:
+        chunk_groups.append(
+            search_chunks(
+                contextual_query,
+                category=strategy_category,
+                top_k=SEARCH_TOP_K,
+            )
+        )
+
+        # 명시 카테고리가 전략 카테고리와 다르면 보조 검색만 추가한다.
+        if resolved_category and resolved_category != strategy_category:
             chunk_groups.append(
                 search_chunks(
                     search_query_en,
@@ -159,8 +156,10 @@ async def build_rag_answer(
                 )
             )
 
-        raw_chunks = _rerank_for_wage_query(
-            _merge_chunks(chunk_groups, top_k=30)
+        resolved_category = strategy_category
+        raw_chunks = rerank_chunks_for_strategy(
+            _merge_chunks(chunk_groups, top_k=30),
+            strategy,
         )[:SEARCH_TOP_K]
     else:
         chunk_groups = [
@@ -183,7 +182,11 @@ async def build_rag_answer(
     )
 
     result = await generate_answer(
-        user_message, chunks, user_profile, resolved_category
+        user_message,
+        chunks,
+        user_profile,
+        resolved_category,
+        conversation_history=conversation_history,
     )
     if not result["grounded"]:
         return {"answer": result["answer"], "sources": []}
